@@ -6,7 +6,6 @@ using Pixelplacement;
 public class PlatformerController : MonoBehaviour
 {
 
-    public Collider collider;
     public Spline attachedSpline;
     public float percentage = 0f;
     private float percentageLast = 0f;
@@ -16,16 +15,16 @@ public class PlatformerController : MonoBehaviour
     //private Rigidbody rb;
     private CharacterController cc;
 
-    private Vector3 targetPosition = Vector3.zero;
-
     private AnchorData anchorCurrent;
     private AnchorData anchorNext;
-    private int anchorNextDirection = 1;
-    private Vector3 anchorNextDirectionVector = Vector3.zero;
+    private int anchorNextDirectionOnPath = 1;
 
     private List<AnchorData> anchorsOnSpline = new List<AnchorData>();
 
-    private Vector2 velocity = Vector3.zero;
+    private Vector2 inputDirections = Vector2.zero;
+    private Vector2 velocity2D = Vector2.zero;
+    private Vector3 direction = Vector3.zero;
+    private Vector3 finalVelocity = Vector3.zero;
 
     private void Start()
     {
@@ -39,127 +38,52 @@ public class PlatformerController : MonoBehaviour
             anchorData.visited = false;
             anchorsOnSpline.Add(anchorData);
         }
-        //anchorsOnSpline[0].visited = true;
 
         anchorCurrent = GetClosestAnchor(transform.position);
-        cc.enabled = false;
-        transform.position = new Vector3(anchorCurrent.positionFlat.x, transform.position.y, anchorCurrent.positionFlat.z);
-        cc.enabled = true;
         SetAnchorsVisited(anchorCurrent.index);
-
         anchorNext = GetNextAnchor();
+
+        TeleportCharacter(new Vector3(anchorCurrent.positionFlat.x, transform.position.y, anchorCurrent.positionFlat.z));
 
     }
 
     private void Update()
     {
-
-        //percentageLast = percentage;
-        //attachedSpline.CalculateLength();
-        //float closestPointPercent = attachedSpline.ClosestPoint(transform.position, 100);
-        //closestPointPercent = Mathf.Clamp(closestPointPercent, 0.0001f, 0.9999f);
-
-        //Vector3 directionToNextPoint = (attachedSpline.GetPosition(closestPointPercent, true) - transform.position);
-        //directionToNextPoint.y = 0;
-        //directionToNextPoint = directionToNextPoint.normalized;
-
-        ////rb.velocity = Vector3.Lerp(rb.velocity, Vector3.zero, 1);
-
-        //if (Input.GetAxis("Horizontal") != 0f)
-        //{
-
-
-
-        //    //float relativeSpeed = (speed * Input.GetAxis("Horizontal")) / attachedSpline.Length;
-        //    //percentage += relativeSpeed * Time.deltaTime;
-
-        //    //percentage = Mathf.Clamp(percentage, 0, 1);
-
-        //    cc.Move(attachedSpline.Forward(closestPointPercent) * Input.GetAxis("Horizontal") * speed * Time.deltaTime);
-
-
-        //}
-
-        //Vector3 splinePosition = attachedSpline.GetPosition(percentage, true);
-        //targetPosition = new Vector3(splinePosition.x, transform.position.y, splinePosition.z);
-
-
-        //Vector3 closestLine = attachedSpline.GetPosition(attachedSpline.ClosestPoint(transform.position, 100));
-        //float angleFromPoint = Mathf.Atan2(transform.position.z - closestLine.z, transform.position.x - closestLine.x) * 180 / Mathf.PI;
-
-        //float offsetDistance = Vector3.Distance(transform.position, closestLine) * Mathf.Sin(angleFromPoint);
-        ////Debug.Log(angleFromPoint);
-        //Debug.Log(offsetDistance);
-
-        //cc.enabled = false;
-        //if (Mathf.Abs(offsetDistance) > 0.3)
-        //    transform.position -= attachedSpline.Right(attachedSpline.ClosestPoint(transform.position, 100)).normalized * offsetDistance;
-        //cc.enabled = true;
-
-        //Debug.DrawLine(splinePosition, targetPosition, Color.white);
-        //Debug.DrawLine(attachedSpline.GetPosition(closestPointPercent), attachedSpline.GetPosition(closestPointPercent) + Vector3.up, Color.red);
-
-        ////collider.transform.position = new Vector3(splinePosition.x, rb.position.y, splinePosition.z);
-        ////rb.MovePosition(new Vector3(splinePosition.x, rb.position.y, splinePosition.z));
-        ////cc.Move(targetPosition - transform.position);
-
-        //if (Input.GetKeyDown(KeyCode.Space))
-        //{
-        //    //rb.AddForce(Vector3.up * 5, ForceMode.VelocityChange);
-        //}
-
-
-        /// Implementation #2: Anchor based movement.
-        //
-
         Vector3 myPos = transform.position;
         myPos.y = 0;
 
-        float inputX = Input.GetAxis("Horizontal");
-        if (inputX != 0f)
-        {
-            int inputSign = (int)Mathf.Sign(inputX);
+        GetInputs();
+        CalculateVelocity2D();
 
-            if (inputSign != anchorNextDirection)
+        if (velocity2D.x != 0)
+        {
+            int velocitySignX = (int)Mathf.Sign(velocity2D.x);
+            if (velocitySignX != anchorNextDirectionOnPath)
             {
-                if (inputSign > 0)
+                if (velocitySignX > 0)
                     anchorNext = GetNextAnchor();
                 else
                     anchorNext = GetPreviousAnchor();
             }
-            anchorNextDirection = inputSign;
+            anchorNextDirectionOnPath = velocitySignX;
 
             AnchorData closestAnchor = GetClosestAnchor(myPos);
-            //Vector3.Distance(transform.position, closestAnchor.Anchor.position) <= .1f || 
-            //bool anchorNextAngleCheckDifferent = false;
-            //if (anchorNext.anchor)
-            //    anchorNextAngleCheckDifferent = (anchorNext.anchor.Anchor.position - myPos).normalized != anchorNextDirectionVector;
 
             if (anchorNext.anchor != null)
                 Debug.DrawRay(anchorNext.positionFlat, Vector3.up * 2, Color.green);
 
             if (Vector3.Distance(myPos, closestAnchor.positionFlat) <= 0.0000001f || anchorNext.anchor == null)
             {
-
-                //anchorCurrent.anchor = closestAnchor;
-                //anchorCurrent.index = closestAnchorID;
                 anchorCurrent = closestAnchor;
 
                 int splineDirectionModifier = (attachedSpline.direction == SplineDirection.Forward ? 1 : -1);
 
-                int anchorNextID = anchorCurrent.index + inputSign * splineDirectionModifier;
+                int anchorNextID = anchorCurrent.index + velocitySignX * splineDirectionModifier;
                 if (!attachedSpline.loop)
                     anchorNextID = Mathf.Clamp(anchorNextID, 0, attachedSpline.Anchors.Length - 1);
                 anchorNextID = (int)Mathf.Repeat(anchorNextID, attachedSpline.Anchors.Length);
 
-                //anchorNext.anchor = attachedSpline.Anchors[anchorNextID];
-                //anchorNext.index = anchorNextID;
-                anchorNextDirectionVector = (anchorNext.positionFlat - myPos).normalized;
-                //Debug.Log(anchorNextDirectionVector);
-
             }
-
-            //velocity.x = inputX;
 
             Vector3 directionToNextPoint = (anchorNext.positionFlat - myPos);
             directionToNextPoint.y = 0;
@@ -168,29 +92,27 @@ public class PlatformerController : MonoBehaviour
             Debug.DrawLine(myPos, myPos + directionToNextPoint, Color.green);
 
             directionToNextPoint.Normalize();
-            int oppositeModifier = anchorNextDirection == inputSign ? 1 : -1;
-            Vector3 moveAmount = (directionToNextPoint * speed * Time.deltaTime) * Mathf.Abs(inputX) * oppositeModifier;
+            int oppositeModifier = anchorNextDirectionOnPath == velocitySignX ? 1 : -1;
+            direction = directionToNextPoint;
+            Vector3 moveAmount = (directionToNextPoint * speed * Time.deltaTime) * Mathf.Abs(velocity2D.x) * oppositeModifier;
 
             if (Vector3.Distance(myPos, anchorNext.positionFlat) <= moveAmount.magnitude)
             {
                 moveAmount = (anchorNext.positionFlat - myPos);
+                finalVelocity.x = moveAmount.x;
+                finalVelocity.z = moveAmount.z;
 
                 // Set anchor visited state to the appropriate state based on direction.
-                anchorNext.visited = (inputSign > 0);
+                anchorNext.visited = (velocitySignX > 0);
 
                 if (anchorNext.visited)
                     anchorNext = GetNextAnchor();
                 else
                     anchorNext = GetPreviousAnchor();
             }
-
-            cc.Move(moveAmount);
-        }
-        else
-        {
-            velocity.x = Mathf.Lerp(velocity.x, 0, 30 * Time.deltaTime);
         }
 
+        Move();
 
         // IDEA!!!!!!!!!!!!! Divide player SPEED by the Spline LENGTH to get the "normalized" relative speed.
         // (Update: It worked!)
@@ -202,21 +124,54 @@ public class PlatformerController : MonoBehaviour
         // Potentail problem with that potential solution: How do you know you've hit a different path? The paths don't have colliders.
         // Potential solution (maybe): Have a script that the ground always has, and it stores which path the ground piece belongs to. Then, when you hit it with a raycast, it will take the path from that script.
 
-
         // NEW IDEA: 
         // Only use straight splines (no curves). 
         // Rather than using percentages and points on the path, just use the "anchors" and find the direction towards the next or previous anchor.
         // If distance to next anchor is less than the normalized direction multiplied by our speed, subtract the distance to the anchor from our speed, and move to the anchor immediately.
         // If there is no next or previous anchor, move in the inverse direction from the current anchor to the opposite direction anchor.
 
+    }
 
+    private void CalculateVelocity2D()
+    {
+        // X velocity
+        if (inputDirections.x != 0f)
+        {
+            velocity2D.x = Mathf.Sign(inputDirections.x) * speed;
+        }
+        else
+        {
+            velocity2D.x = Mathf.Lerp(velocity2D.x, 0, 30 * Time.deltaTime);
+        }
+
+        // Y velocity
+
+    }
+
+    private void GetInputs()
+    {
+        inputDirections.x = Input.GetAxis("Horizontal");
+    }
+
+    private void Move()
+    {
+
+        Vector3 finalVelocity = Vector3.zero;
+        int oppositeModifier = 1;
+        if (Mathf.Sign(velocity2D.x) < 0) oppositeModifier = -1;
+        finalVelocity = direction * (velocity2D.x * oppositeModifier);
+        finalVelocity.y = velocity2D.y;
+
+        cc.Move(finalVelocity * Time.deltaTime);
 
     }
 
 
-    private void Move()
+    private void TeleportCharacter(Vector3 targetPosition)
     {
-        
+        cc.enabled = false;
+        transform.position = targetPosition;
+        cc.enabled = true;
 
     }
 
@@ -361,7 +316,6 @@ public class PlatformerController : MonoBehaviour
         if (moveToOtherSplinePath)
         {
             attachedSpline = moveToOtherSplinePath.targetSpline;
-            //percentage = attachedSpline.ClosestPoint(rb.position);
         }
         
     }
